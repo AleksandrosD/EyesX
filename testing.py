@@ -2,21 +2,50 @@ import cv2
 import numpy as np
 from mss import mss
 from ultralytics import YOLO
+import json
+import os
+
+RECT_FILE = "rectangles.json"
+if os.path.exists(RECT_FILE):
+    with open(RECT_FILE, "r") as f:
+        rectangles = json.load(f)
+else:
+    rectangles = []
 
 
 model = YOLO("yolov8n.pt")
 
 sct = mss()
 monitor = sct.monitors[3]  
-cv2.namedWindow("YOLOv8 Screen Detection", cv2.WINDOW_NORMAL)
-cv2.resizeWindow("YOLOv8 Screen Detection", 1200, 800)
+cv2.namedWindow("EyesX", cv2.WINDOW_NORMAL)
+cv2.resizeWindow("EyesX", 1200, 800)
 drawing = False
 start_x, start_y = -1, -1
-rectangles = []
+
+current_frame = None
+
+def rectangles_overlap(a, b):
+    ax1, ay1, ax2, ay2 = a
+    bx1, by1, bx2, by2 = b
+
+    ax1, ax2 = min(ax1, ax2), max(ax1, ax2)
+    ay1, ay2 = min(ay1, ay2), max(ay1, ay2)
+    bx1, bx2 = min(bx1, bx2), max(bx1, bx2)
+    by1, by2 = min(by1, by2), max(by1, by2)
+
+    return not (
+        ax2 < bx1 or  
+        ax1 > bx2 or  
+        ay2 < by1 or  
+        ay1 > by2     
+    )
 
 def draw_rectangle(event, x, y, flags, param):
-    global start_x, start_y, drawing, rectangles
+    global start_x, start_y, drawing, rectangles, current_frame
 
+    if current_frame is None:
+        return
+    
     if event == cv2.EVENT_LBUTTONDOWN:
         drawing = True
         start_x, start_y = x, y
@@ -24,13 +53,13 @@ def draw_rectangle(event, x, y, flags, param):
     elif event == cv2.EVENT_MOUSEMOVE:
         if drawing:
             # Draw temporary rectangle on a copy of the frame
-            frame_copy = param.copy()
+            frame_copy = current_frame.copy()
             cv2.rectangle(frame_copy, (start_x, start_y), (x, y), (0, 255, 0), 2)
             # Draw all permanent rectangles
             for rect in rectangles:
                 x1, y1, x2, y2 = rect
                 cv2.rectangle(frame_copy, (x1, y1), (x2, y2), (255, 0, 0), 2)
-            cv2.imshow("YOLOv8 Screen Detection", frame_copy)
+            cv2.imshow("EyesX", frame_copy)
 
     elif event == cv2.EVENT_LBUTTONUP:
         drawing = False
@@ -38,28 +67,62 @@ def draw_rectangle(event, x, y, flags, param):
         rectangles.append((start_x, start_y, end_x, end_y))
 
 # Attach the mouse callback
-cv2.setMouseCallback("YOLOv8 Screen Detection", draw_rectangle)
+cv2.setMouseCallback("EyesX", draw_rectangle)
 
 while True:
     screenshot = sct.grab(monitor)
     frame = np.array(screenshot)
     frame = cv2.cvtColor(frame, cv2.COLOR_BGRA2BGR)
+    current_frame = frame.copy()
 
     # YOLO inference
-    results = model(frame, conf=0.3, verbose=False)
-
-    
+    results = model(frame, conf=0.3,classes=[0, 2, 7], verbose=False)
     annotated_frame = results[0].plot()
 
+    #Draw rectangles
     for rect in rectangles:
        x1, y1, x2, y2 = rect
        cv2.rectangle(annotated_frame, (x1, y1), (x2, y2), (255, 0, 0), 2)
 
-    cv2.imshow("YOLOv8 Screen Detection", annotated_frame)
+    #If rectangles overlap 
+    trigger_alert = False
+    for box in results[0].boxes:
+        x1, y1, x2, y2 = map(int, box.xyxy[0])
 
+        for rect in rectangles:
+            if rectangles_overlap((x1, y1, x2, y2), rect):
+                trigger_alert = True
+                break
 
-    if cv2.waitKey(1) & 0xFF == ord("q"):
+        if trigger_alert:
+            break 
+    
+    #Red alert
+    if trigger_alert:
+        red_overlay = np.zeros_like(annotated_frame)
+        red_overlay[:, :, 2] = 255
+
+        annotated_frame = cv2.addWeighted(
+            annotated_frame, 0.7,
+            red_overlay, 0.3,
+            0
+        )
+
+    cv2.imshow("EyesX", annotated_frame)
+
+    # "q" for exit/save, "d" for delete all rectangles
+    key = cv2.waitKey(1) & 0xFF
+    if key == ord("q"):
+        # Save rectangles
+        with open(RECT_FILE, "w") as f:
+            json.dump(rectangles, f)
         break
+    elif key == ord("d"):
+        rectangles.clear()  # remove from memory
+
+        if os.path.exists(RECT_FILE):
+            os.remove(RECT_FILE)  # remove from disk
+
+        print("Rectangles deleted")
 
 cv2.destroyAllWindows()
-#
