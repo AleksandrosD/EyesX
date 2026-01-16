@@ -1,12 +1,12 @@
+#This model does not use yolov8, it uses frame comparison/background modeling (easier on the GPU/better with small camera feeds)
 import cv2
 import numpy as np
 from mss import mss
-from ultralytics import YOLO
 import json
 import os
 import pygame
 
-RECT_FILE = "rectangles.json"
+RECT_FILE = "rectangles2.json"
 if os.path.exists(RECT_FILE):
     with open(RECT_FILE, "r") as f:
         rectangles = json.load(f)
@@ -14,7 +14,6 @@ else:
     rectangles = []
 
 
-model = YOLO("yolov8n.pt")
 pygame.mixer.init()
 pygame.mixer.music.load("alarm.mp3")
 sct = mss()
@@ -68,54 +67,56 @@ def draw_rectangle(event, x, y, flags, param):
         end_x, end_y = x, y
         rectangles.append((start_x, start_y, end_x, end_y))
 
-# Attach the mouse callback
 cv2.setMouseCallback("EyesX", draw_rectangle)
-
+fgbg = cv2.createBackgroundSubtractorMOG2(
+    history=500,
+    varThreshold=25,
+    detectShadows=True
+)
 while True:
     screenshot = sct.grab(monitor)
     frame = np.array(screenshot)
     frame = cv2.cvtColor(frame, cv2.COLOR_BGRA2BGR)
     current_frame = frame.copy()
+    
+    fgmask = fgbg.apply(frame)
 
-    # YOLO inference
-    results = model(frame, conf=0.3,classes=[0, 2, 7], verbose=False)
-    annotated_frame = results[0].plot()
+    # Remove shadows (keep only real motion)
+    _, fgmask = cv2.threshold(fgmask, 200, 255, cv2.THRESH_BINARY)
+
+    # Clean noise
+    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
+    fgmask = cv2.morphologyEx(fgmask, cv2.MORPH_OPEN, kernel)
 
     #Draw rectangles
+    trigger_alert = False
+    MOTION_THRESHOLD = 500
     for rect in rectangles:
        x1, y1, x2, y2 = rect
-       cv2.rectangle(annotated_frame, (x1, y1), (x2, y2), (255, 0, 0), 2)
+       cv2.rectangle(frame, (x1, y1), (x2, y2), (255, 0, 0), 2)
+       x1, x2 = min(x1, x2), max(x1, x2)
+       y1, y2 = min(y1, y2), max(y1, y2)
 
-    #If rectangles overlap 
-    trigger_alert = False
-    for box in results[0].boxes:
-        x1, y1, x2, y2 = map(int, box.xyxy[0])
+       roi = fgmask[y1:y2, x1:x2]
+       motion_pixels = cv2.countNonZero(roi)
 
-        for rect in rectangles:
-            if rectangles_overlap((x1, y1, x2, y2), rect):
-                trigger_alert = True
-                break
+       if motion_pixels > MOTION_THRESHOLD:
+            trigger_alert = True
+            break
 
-        if trigger_alert:
-            break 
     
     #Red alert
     if trigger_alert:
-        red_overlay = np.zeros_like(annotated_frame)
+        red_overlay = np.zeros_like(frame)
         red_overlay[:, :, 2] = 255
 
-        annotated_frame = cv2.addWeighted(
-            annotated_frame, 0.7,
+        frame = cv2.addWeighted(
+            frame, 0.7,
             red_overlay, 0.3,
             0
         )
-    #     if not pygame.mixer.music.get_busy():
-    #         pygame.mixer.music.play()
-    # else:
-    #     if pygame.mixer.music.get_busy():
-    #         pygame.mixer.music.stop()
 
-    cv2.imshow("EyesX", annotated_frame)
+    cv2.imshow("EyesX", frame)
 
     # "q" for exit/save, "d" for delete all rectangles
     key = cv2.waitKey(1) & 0xFF
