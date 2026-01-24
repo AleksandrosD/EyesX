@@ -4,7 +4,7 @@ import numpy as np
 from mss import mss
 import json
 import os
-import pygame
+# import pygame
 
 RECT_FILE = "rectangles2.json"
 if os.path.exists(RECT_FILE):
@@ -14,8 +14,8 @@ else:
     rectangles = []
 
 
-pygame.mixer.init()
-pygame.mixer.music.load("alarm.mp3")
+# pygame.mixer.init()
+# pygame.mixer.music.load("alarm.mp3")
 sct = mss()
 monitor = sct.monitors[2]  
 cv2.namedWindow("EyesX", cv2.WINDOW_NORMAL)

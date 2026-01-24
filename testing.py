@@ -4,8 +4,8 @@ from mss import mss
 from ultralytics import YOLO
 import json
 import os
-import pygame
-
+# import pygame
+muted = False
 RECT_FILE = "rectangles.json"
 if os.path.exists(RECT_FILE):
     with open(RECT_FILE, "r") as f:
@@ -15,10 +15,10 @@ else:
 
 
 model = YOLO("yolov8n.pt")
-pygame.mixer.init()
-pygame.mixer.music.load("alarm.mp3")
+# pygame.mixer.init()
+# pygame.mixer.music.load("alarm.mp3")
 sct = mss()
-monitor = sct.monitors[2]  
+monitor = sct.monitors[1]  
 cv2.namedWindow("EyesX", cv2.WINDOW_NORMAL)
 cv2.resizeWindow("EyesX", 1200, 800)
 drawing = False
@@ -100,6 +100,11 @@ while True:
             break 
     
     #Red alert
+    # if muted:
+    #     pygame.mixer.music.set_volume(0)
+    # else:
+    #     pygame.mixer.music.set_volume(1)
+
     if trigger_alert:
         red_overlay = np.zeros_like(annotated_frame)
         red_overlay[:, :, 2] = 255
@@ -114,6 +119,19 @@ while True:
     # else:
     #     if pygame.mixer.music.get_busy():
     #         pygame.mixer.music.stop()
+
+    words = ["Exit App (q)", "Delete All Boxes (d)", "Mute Alarm (m)"]
+    x, y = 10, 30
+    line_height = 35  # vertical spacing
+
+    for i, word in enumerate(words):
+        cv2.putText(annotated_frame, word,
+                    (x, y + i * line_height),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    1.0,
+                    (255, 255, 255),
+                    2,
+                    cv2.LINE_AA)
 
     cv2.imshow("EyesX", annotated_frame)
 
@@ -131,5 +149,7 @@ while True:
             os.remove(RECT_FILE)  # remove from disk
 
         print("Rectangles deleted")
+    elif key==ord("m"):
+        muted = not muted
 
 cv2.destroyAllWindows()
