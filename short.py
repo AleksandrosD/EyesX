@@ -17,7 +17,7 @@ else:
 # pygame.mixer.init()
 # pygame.mixer.music.load("alarm.mp3")
 sct = mss()
-monitor = sct.monitors[2]  
+monitor = sct.monitors[1]  
 cv2.namedWindow("EyesX", cv2.WINDOW_NORMAL)
 cv2.resizeWindow("EyesX", 1200, 800)
 drawing = False
