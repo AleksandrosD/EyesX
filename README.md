@@ -1,5 +1,5 @@
 <p align="center">
-  <img  src="eyesXLogo.png" alt="EyesX Logo" width="400">
+  <img  src="eyesXLogo.png" alt="EyesX Logo" width="200">
 </p>
 
 # EyesX
