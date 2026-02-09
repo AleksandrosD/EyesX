@@ -45,7 +45,7 @@ EyesX is a Python-based motion detection and monitoring system designed for surv
 
 ## Why I Built EyesX
 
-I built EyesX based on real-world experience.
+I built EyesX based on real-world experience (vibe coded it).
 
 While working as a building manager, I noticed a recurring problem:
 security personnel were responsible for monitoring multiple camera feeds for long periods of time, and human attention naturally drops. Guards would sometimes get distracted (phones, conversations, fatigue), and as a result, important events were missed.
